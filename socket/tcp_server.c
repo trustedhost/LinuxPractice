@@ -2,8 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <arpa/inet.h> // for inet_ntoa
-
+#include <arpa/inet.h> // for inet_ntop
 
 #define TCP_PORT 5100
 
@@ -18,7 +17,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /* set address and register service to OS.*/
+    /* set address and register service to OS. */
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -26,32 +25,53 @@ int main(int argc, char **argv) {
 
     if(bind(ssock, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
         perror("bind()");
+        close(ssock);  // 에러 발생 시 소켓을 닫음
         return -1;
     }
-    if(listen(ssock,8) < 0) {
-        perror("lisen()");
+
+    if(listen(ssock, 8) < 0) {
+        perror("listen()");
+        close(ssock);
         return -1;
     }
     
     clen = sizeof(cliaddr);
 
-    do {
-        int n, csock = accept(ssock, (struct sockaddr *)&cliaddr, &clen);
+    while (1) {
+        int n;
+        int csock = accept(ssock, (struct sockaddr *)&cliaddr, &clen);
+        if (csock < 0) {
+            perror("accept()");
+            close(ssock);
+            return -1;
+        }
 
         inet_ntop(AF_INET, &cliaddr.sin_addr, mesg, BUFSIZ);
         printf("Client is connected : %s\n", mesg);
 
-        if ((n = read(csock, mesg, BUFSIZ)) <= 0){
+        if ((n = read(csock, mesg, BUFSIZ)) <= 0) {
             perror("read()");
+            close(csock);
+            continue;  // 에러 발생 시 다음 클라이언트 연결 대기
         }
+
+        mesg[n] = '\0';  // null-terminate the received string
         printf("Received data : %s", mesg);
 
         if(write(csock, mesg, n) <= 0) {
             perror("write()");
+            close(csock);
+            continue;
         }
-        close(csock);
 
-    } while (strncmp(mesg, "q", 1));
+        if (strncmp(mesg, "q", 1) == 0) {
+            printf("Server is shutting down...\n");
+            close(csock);
+            break;
+        }
+
+        close(csock);  // 클라이언트와의 연결을 정상적으로 종료
+    }
 
     close(ssock);
 
