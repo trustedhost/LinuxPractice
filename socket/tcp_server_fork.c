@@ -6,7 +6,15 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 
-#define TCP_PORT 5100  /* 서버의 포트 번호 */
+#define TCP_PORT 5100 				/* 서버의 포트 번호 */
+
+static int g_noc = 0;
+
+void sigfunc(int no) 
+{
+    printf("Signal : %d(%d)\n", no, g_noc);
+    if(--g_noc == 0) exit(0);
+}
 
 int main(int argc, char **argv)
 {
@@ -16,6 +24,10 @@ int main(int argc, char **argv)
     int n;
     struct sockaddr_in servaddr, cliaddr;  /* 주소 구조체 정의 */
     char mesg[BUFSIZ];
+
+    portno = (argc == 2)?atoi(argv[1]):TCP_PORT;
+
+    signal(SIGCHLD, sigfunc);
 
     /* 서버 소켓 생성 */
     if((ssock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
