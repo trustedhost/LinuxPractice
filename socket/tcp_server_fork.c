@@ -2,9 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <sys/wait.h>
 
 #define TCP_PORT 5100 				/* 서버의 포트 번호 */
 
@@ -18,11 +18,10 @@ void sigfunc(int no)
 
 int main(int argc, char **argv)
 {
-    int ssock;  /* 소켓 디스크립트 정의 */
+    int ssock, portno, n;                   /* 소켓 디스크립트 정의 */
+    struct sockaddr_in servaddr, cliaddr; 	/* 주소 구조체 정의 */
     socklen_t clen;
-    pid_t pid;
-    int n;
-    struct sockaddr_in servaddr, cliaddr;  /* 주소 구조체 정의 */
+    pid_t pid;                              /* fork( ) 함수를 위한 PID */
     char mesg[BUFSIZ];
 
     portno = (argc == 2)?atoi(argv[1]):TCP_PORT;
@@ -42,7 +41,6 @@ int main(int argc, char **argv)
     servaddr.sin_port = htons(TCP_PORT);  /* 사용할 포트 지정 */
 
     /* bind 함수를 사용하여 서버 소켓의 주소 설정 */
-    unlink()
     if(bind(ssock, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
         perror("bind()");
         close(ssock);
@@ -68,8 +66,10 @@ int main(int argc, char **argv)
         /* 네트워크 주소를 문자열로 변경 */
         inet_ntop(AF_INET, &cliaddr.sin_addr, mesg, BUFSIZ);
         printf("Client is connected : %s\n", mesg);
+        g_noc++;
 
-        if((pid = fork()) < 0) {
+        /* 연결되는 클라이언트와의 통신을 위한 자식 프로세스 생성 */
+        if((pid = fork()) < 0) {  
             perror("fork()");
             close(csock);
             continue;
@@ -77,24 +77,24 @@ int main(int argc, char **argv)
             close(ssock);  /* 자식 프로세스에서 서버 소켓을 닫음 */
 
             while(1) {
-                memset(mesg, 0, BUFSIZ);
+            memset(mesg, 0, BUFSIZ);
                 n = read(csock, mesg, BUFSIZ);
                 if(n <= 0) {
                     if(n < 0) perror("read()");
                     break;  /* 클라이언트가 연결을 종료한 경우 루프 종료 */
                 }
 
-                printf("Received data : %s", mesg);
+            printf("Received data : %s", mesg);
 
-                /* 클라이언트로 buf에 있는 문자열 전송 */
+            /* 클라이언트로 buf에 있는 문자열 전송 */
                 if(write(csock, mesg, n) <= 0) {
-                    perror("write()");
+                perror("write()");
                     break;
                 }
 
                 if(strncmp(mesg, "q", 1) == 0)
                     break;
-            }
+        }
 
             close(csock);  /* 클라이언트 소켓을 닫음 */
             exit(0);  /* 자식 프로세스 종료 */
