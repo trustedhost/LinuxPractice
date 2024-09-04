@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
             int size = read(sockfd, mesg, BUFSIZ);
             if (size > 0) {
                 write(1, mesg, size);
-            } else {
+            } else { // read 의 반환값이 0인 경우, socket 연결이 끊어졌다고 보면 된다. 
                 break; /* 서버가 연결을 끊었을 때 종료 */
             }
         }
