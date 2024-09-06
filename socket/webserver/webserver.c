@@ -48,14 +48,20 @@ int main(int argc, char **argv)
 
     while(1) {
         char mesg[BUFSIZ];
-        int csock;
+        int *csock = malloc(sizeof(int));  // 동적 할당된 소켓 포인터
         len = sizeof(cliaddr);
-        csock = accept(ssock, (struct sockaddr*)&cliaddr, &len);
+        *csock = accept(ssock, (struct sockaddr*)&cliaddr, &len);
+
+        if (*csock == -1) {
+            perror("accept()");
+            free(csock);  // 오류 발생 시 메모리 해제
+            continue;
+        }
 
         inet_ntop(AF_INET, &cliaddr.sin_addr, mesg, BUFSIZ);
         printf("Client IP : %s:%d\n", mesg, ntohs(cliaddr.sin_port));
 
-        pthread_create(&thread, NULL, clnt_connection, &csock);
+        pthread_create(&thread, NULL, clnt_connection, csock);
         pthread_detach(thread);  // 스레드를 분리하여 리소스 누수를 방지
     }
     return 0;
@@ -65,6 +71,9 @@ void *clnt_connection(void *arg) {
     int csock = *((int*)arg);
     FILE *clnt_read, *clnt_write;
     char reg_line[BUFSIZ], method[BUFSIZ], filename[BUFSIZ], *ret;
+    char host[BUFSIZ] = {0};  // Host 헤더 값을 저장할 변수
+
+    free(arg);  // 동적 할당된 소켓 포인터 해제
 
     clnt_read = fdopen(csock, "r");
     clnt_write = fdopen(dup(csock), "w");
@@ -94,6 +103,17 @@ void *clnt_connection(void *arg) {
     }
 
     strcpy(filename, ret + 1);  // '/' 이후의 파일명만 복사
+
+    // 헤더 부분을 계속 읽어서 Host 헤더를 찾음
+    while (fgets(reg_line, BUFSIZ, clnt_read) != NULL && strcmp(reg_line, "\r\n") != 0) {
+        if (strncmp(reg_line, "Host:", 5) == 0) {
+            // Host 헤더 값을 추출
+            strcpy(host, reg_line + 6);
+            // 개행 문자 제거
+            host[strcspn(host, "\r\n")] = 0;
+            printf("Host: %s\n", host);  // Host 값을 출력
+        }
+    }
 
     if (access(filename, F_OK) == -1) {  // 파일 존재 여부 확인
         sendError(clnt_write, "File not found");
