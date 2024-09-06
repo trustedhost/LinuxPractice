@@ -104,6 +104,8 @@ void *clnt_connection(void *arg) {
 
     strcpy(filename, ret + 1);  // '/' 이후의 파일명만 복사
 
+
+/* solution 1
     // 헤더 부분을 계속 읽어서 Host 헤더를 찾음
     while (fgets(reg_line, BUFSIZ, clnt_read) != NULL && strcmp(reg_line, "\r\n") != 0) {
         if (strncmp(reg_line, "Host:", 5) == 0) {
@@ -114,6 +116,23 @@ void *clnt_connection(void *arg) {
             printf("Host: %s\n", host);  // Host 값을 출력
         }
     }
+ */
+
+// solution 2 - strtok 사용
+    while (fgets(reg_line, BUFSIZ, clnt_read) != NULL && strcmp(reg_line, "\r\n") != 0) {
+        char *token = strtok(reg_line, " :\r\n");
+        // "Host" 헤더가 있는 지 확인
+        if (token != NULL&& strcmp(token, "Host") == 0){
+            token = strtok(NULL, " \r\n");
+
+            if (token != NULL) {
+                strcpy(host, token);
+                printf("Host : %s\n", host);
+            }
+        }
+    }
+
+    // "User-Agent" 헤더가 있는지 확인
 
     if (access(filename, F_OK) == -1) {  // 파일 존재 여부 확인
         sendError(clnt_write, "File not found");
