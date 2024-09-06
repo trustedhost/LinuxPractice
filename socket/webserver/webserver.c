@@ -12,7 +12,7 @@
 static void *clnt_connection(void *arg);
 int sendData(FILE* fp, char *ct, char *filename);
 void sendOk(FILE* fp);
-void sendError(FILE* fp);
+void sendError(FILE* fp, const char *message);
 
 int main(int argc, char **argv)
 {
@@ -49,81 +49,71 @@ int main(int argc, char **argv)
     while(1) {
         char mesg[BUFSIZ];
         int csock;
-        /* waiting for client request */
         len = sizeof(cliaddr);
         csock = accept(ssock, (struct sockaddr*)&cliaddr, &len);
 
         inet_ntop(AF_INET, &cliaddr.sin_addr, mesg, BUFSIZ);
-        printf("Client IP : %s:%s\n",  mesg, ntohs(cliaddr.sin_port));
+        printf("Client IP : %s:%d\n", mesg, ntohs(cliaddr.sin_port));
 
         pthread_create(&thread, NULL, clnt_connection, &csock);
-
-        /* pthread_join(thread,NULL); */
+        pthread_detach(thread);  // 스레드를 분리하여 리소스 누수를 방지
     }
     return 0;
 }
 
 void *clnt_connection(void *arg) {
-
     int csock = *((int*)arg);
     FILE *clnt_read, *clnt_write;
-    char reg_line[BUFSIZ], reg_buf[BUFSIZ];
-    char method[BUFSIZ], type[BUFSIZ];
-    char filename[BUFSIZ], *ret;
+    char reg_line[BUFSIZ], method[BUFSIZ], filename[BUFSIZ], *ret;
 
-    /* convert file descriptor to FILE stream. */
     clnt_read = fdopen(csock, "r");
     clnt_write = fdopen(dup(csock), "w");
 
-    /* read line and store in reg_line */
-    fgets(reg_line, BUFSIZ, clnt_read);
+    if (fgets(reg_line, BUFSIZ, clnt_read) == NULL) {
+        sendError(clnt_write, "Failed to read request");
+        goto END;
+    }
 
-    /* print string to stdout */
     fputs(reg_line, stdout);
 
-    ret = strtok(reg_line, "/ ");
-    strcpy(method, (ret != NULL)? ret : "");
-    if(strcmp(method, "POST") == 0) {
+    ret = strtok(reg_line, " ");
+    strcpy(method, (ret != NULL) ? ret : "");
+
+    if (strcmp(method, "POST") == 0) {
         sendOk(clnt_write);
         goto END;
     } else if (strcmp(method, "GET") != 0) {
-        sendError(clnt_write);
+        sendError(clnt_write, "Invalid method");
         goto END;
     }
 
     ret = strtok(NULL, " ");
-    strcpy(filename, (ret != NULL) ? ret : "") ;
-    if(filename[0] == '/') {
-        for(int i = 0, j = 0; i < BUFSIZ; i ++, j++) {
-            if(filename[0] == '/') j++;
-            filename[i] = filename[j];
-            if(filename[j] == '\0') break;
-        }
+    if (ret == NULL || ret[0] != '/') {
+        sendError(clnt_write, "Invalid filename");
+        goto END;
     }
 
-    do {
-        fgets(reg_line, BUFSIZ, clnt_read);
-        fputs(reg_line, stdout);
-        strcpy(reg_buf, reg_line);
-        char *str = strchr(reg_buf, ':');
-    } while (strncmp(reg_line, "\r\n", 2));
+    strcpy(filename, ret + 1);  // '/' 이후의 파일명만 복사
 
-    sendData(clnt_write, type, filename);
+    if (access(filename, F_OK) == -1) {  // 파일 존재 여부 확인
+        sendError(clnt_write, "File not found");
+        goto END;
+    }
+
+    sendData(clnt_write, "text/html", filename);
 
 END:
     fclose(clnt_read);
     fclose(clnt_write);
     pthread_exit(0);
-
-    return (void*) NULL;
+    return NULL;
 }
 
-
 int sendData(FILE* fp, char *ct, char *filename) {
-    char protocol[ ] = "HTTP/1.1 200 OK\r\n";
-    char server[ ] = "Server:Netscape-Enterprise/6.0\r\n";
-    char cnt_type[ ] = "Content-Type:text/html\r\n";
-    char end[ ] = "\r\n";
+    char protocol[] = "HTTP/1.1 200 OK\r\n";
+    char server[] = "Server: SimpleServer\r\n";
+    char cnt_type[] = "Content-Type:text/html\r\n";
+    char end[] = "\r\n";
     char buf[BUFSIZ];
     int fd, len;
 
@@ -132,42 +122,40 @@ int sendData(FILE* fp, char *ct, char *filename) {
     fputs(cnt_type, fp);
     fputs(end, fp);
 
-    fd = open(filename, O_RDWR);
-    do {
-        len = read(fd, buf, BUFSIZ);
-        fputs(buf, fp);
-    } while (len == BUFSIZ);
+    fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("open()");
+        return -1;
+    }
+
+    while ((len = read(fd, buf, BUFSIZ)) > 0) {
+        fwrite(buf, sizeof(char), len, fp);
+    }
 
     close(fd);
-
+    fflush(fp);
     return 0;
 }
 
-void sendOk(FILE* fp)
-{
-    char protocol[ ] = "HTTP/1.1 200 OK\r\n";
-    char server[ ] = "Server: Netscape-Enterprise/6.0\r\n\r\n";
+void sendOk(FILE* fp) {
+    char protocol[] = "HTTP/1.1 200 OK\r\n";
+    char server[] = "Server: SimpleServer\r\n\r\n";
     fputs(protocol, fp);
     fputs(server, fp);
     fflush(fp);
 }
 
-void sendError(FILE* fp)
-{
-    char protocol[ ] = "HTTP/1.1 400 Bad Request\r\n";
-    char server[ ] = "Server: Netscape-Enterprise/6.0\r\n";
-    char cnt_len[ ] = "Content-Length:1024\r\n";
-    char cnt_type[ ] = "Content-Type:text/html\r\n\r\n";
+void sendError(FILE* fp, const char *message) {
+    char protocol[] = "HTTP/1.1 400 Bad Request\r\n";
+    char server[] = "Server: SimpleServer\r\n";
+    char cnt_type[] = "Content-Type:text/html\r\n\r\n";
+    char content[BUFSIZ];
 
-    char content1[ ] = "<html><head><title>BAD Connection</title></head>";
-    char content2[ ] = "<body><font size=+5>Bad Request</font></body></html>";
+    snprintf(content, BUFSIZ, "<html><head><title>Error</title></head><body><h1>%s</h1></body></html>", message);
 
-    printf("send_error\n");
     fputs(protocol, fp);
     fputs(server, fp);
-    fputs(cnt_len, fp);
     fputs(cnt_type, fp);
-    fputs(content1, fp);
-    fputs(content2, fp);
+    fputs(content, fp);
     fflush(fp);
 }
