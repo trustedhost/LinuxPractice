@@ -117,7 +117,7 @@ static void process_image(const void *p)
     unsigned short pixel;
     unsigned char inimg[NUMCOLOR*WIDTH*HEIGHT]; /* 이미지 저장을 위한 변수 */
     long location = 0, count = 0;
-    for(y = 0; y < height; ++y) {
+    for(y = 0; y < height; ++y, count = 0) {
         for(j = 0, x = 0; j < vinfo.xres * 2; j += 4, x += 2) {
             if(j >= width*2) {                 /* 현재의 화면에서 이미지를 넘어서는 빈 공간을 처리 */
                  location++; location++;
