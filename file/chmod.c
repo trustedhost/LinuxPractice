@@ -18,5 +18,12 @@ int main(int argc, char* argv[]) {
 		perror("chmod");
 		return -1;
 	}
+
+	// mod : 644 ( -rw-r--r-- ) 
+	if (chmod(argv[2], S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) < 0) {
+		perror("chmod");
+		return -1;
+	}
+	
 	return 0;
 }
