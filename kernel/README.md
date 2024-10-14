@@ -34,3 +34,9 @@
 - module 빌드 후 insmod 
 - sudo mknod /dev/<device_name> <device type> <주번호> <부번호> 명령으로 디바이스 파일 추가
 - sudo chmod 666 /dev/<device_name> 으로 권한 변경.
+
+
+### 커널 뻑나는 경우
+- 프로그램 실행 순서에 따라 커널 뻑나는 경우 발생. 
+    - ex) 없는 프로세스에다가 시그널 보내는 경우. 
+    - 커널 뻑나면 컴퓨터 중지됨. 
